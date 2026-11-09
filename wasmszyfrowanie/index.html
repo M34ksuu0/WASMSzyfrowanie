@@ -1,0 +1,109 @@
+
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Szyfrowanie XOR</title>
+</head>
+<body>
+    <label>Tekst:</label><br>
+    <input id="tekst" placeholder="Podaj tekst">
+
+    <br><br>
+
+    <label>Klucz:</label><br>
+    <input id="klucz" type="text" maxlength="32"
+           placeholder="Podaj zwykły klucz">
+
+    <br><br>
+
+    <button onclick="szyfruj()">Szyfruj</button>
+
+    <h3>Wynik:</h3>
+    <textarea id="wynik" rows="5" cols="50" readonly></textarea>
+
+    <script src="szyfr.js"></script>
+
+    <script>
+        const ModulePromise = Szyfr();
+
+        async function szyfruj() {
+            let inputPtr = 0;
+            let outputPtr = 0;
+            let keyPtr = 0;
+
+            try {
+                const Module = await ModulePromise;
+
+                const tekst = document.getElementById("tekst").value;
+                const klucz = document.getElementById("klucz").value;
+
+                if (!tekst) {
+                    alert("Podaj tekst!");
+                    return;
+                }
+
+                if (klucz.length !== 32) {
+                    alert("Klucz musi mieć dokładnie 32 znaki!");
+                    return;
+                }
+
+                const encoder = new TextEncoder();
+
+                const inputBytes = encoder.encode(tekst);
+                const keyBytes = encoder.encode(klucz);
+
+                if (keyBytes.length !== 32) {
+                    alert("Klucz musi mieć dokładnie 32 bajty UTF-8!");
+                    return;
+                }
+
+                const dlugosc = inputBytes.length;
+
+                inputPtr = Module._malloc(dlugosc);
+                outputPtr = Module._malloc(dlugosc);
+                keyPtr = Module._malloc(32);
+
+                if (!inputPtr || !outputPtr || !keyPtr) {
+                    throw new Error("Nie udało się przydzielić pamięci");
+                }
+
+                // Kopiowanie oryginalnych bajtów
+                Module.HEAPU8.set(inputBytes, inputPtr);
+                Module.HEAPU8.set(keyBytes, keyPtr);
+
+                // Wywołanie funkcji C++
+                Module._szyfruj(
+                    inputPtr,
+                    outputPtr,
+                    dlugosc,
+                    keyPtr
+                );
+
+                // Odczyt surowych bajtów
+                const wynikBytes = Module.HEAPU8.slice(
+                    outputPtr,
+                    outputPtr + dlugosc
+                );
+
+                // Wyświetlenie jako tekst
+                const wynik = new TextDecoder().decode(wynikBytes);
+
+                document.getElementById("wynik").value = wynik;
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById("wynik").value =
+                    "Błąd: " + error.message;
+            } finally {
+                const Module = await ModulePromise;
+
+                if (inputPtr) Module._free(inputPtr);
+                if (outputPtr) Module._free(outputPtr);
+                if (keyPtr) Module._free(keyPtr);
+            }
+        }
+    </script>
+
+</body>
+</html>
